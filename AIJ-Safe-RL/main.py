@@ -13,6 +13,8 @@ from utils.running_stats import RunningStats
 from collections import deque
 from algorithm.cup import CUP
 from algorithm.cup_clip import CUP_clip
+from algorithm.cup_normalized_clip import CUP_normalized_clip
+
 
 def train(args):
     # Initialize data type
@@ -47,10 +49,10 @@ def train(args):
     cvf_optimizer = torch.optim.Adam(cvalue_net.parameters(), args.cvf_lr)
 
     # Initialize learning rate scheduler
-    lr_lambda = lambda it: max(1.0 - it / args.max_iter_num, 0)
-    pi_scheduler = torch.optim.lr_scheduler.LambdaLR(pi_optimizer, lr_lambda=lr_lambda)
-    vf_scheduler = torch.optim.lr_scheduler.LambdaLR(vf_optimizer, lr_lambda=lr_lambda)
-    cvf_scheduler = torch.optim.lr_scheduler.LambdaLR(cvf_optimizer, lr_lambda=lr_lambda)
+    # lr_lambda = lambda it: max(1.0 - it / args.max_iter_num, 0)
+    # pi_scheduler = torch.optim.lr_scheduler.LambdaLR(pi_optimizer, lr_lambda=lr_lambda)
+    # vf_scheduler = torch.optim.lr_scheduler.LambdaLR(vf_optimizer, lr_lambda=lr_lambda)
+    # cvf_scheduler = torch.optim.lr_scheduler.LambdaLR(cvf_optimizer, lr_lambda=lr_lambda)
 
     # Store hyperparameters for log
     hyperparams = vars(args)
@@ -61,25 +63,33 @@ def train(args):
     cscore_queue = deque(maxlen=100)
     logger = Logger(hyperparams)
     # Get constraint bounds
-    #cost_lim = get_threshold(envname, constraint=args.constraint)
+    # cost_lim = get_threshold(envname, constraint=args.constraint)
     cost_lim = logger.hyperparams["cost_lim"]
     # Initialize and train CUP agent
     if args.algo == "CUP":
         agent = CUP(env, policy, value_net, cvalue_net,
-                       pi_optimizer, vf_optimizer, cvf_optimizer,
-                       args.num_epochs, args.mb_size,
-                       args.c_gamma, args.lam, args.delta, args.eta,
-                       args.nu, args.nu_lr, args.nu_max, cost_lim,
-                       args.l2_reg, score_queue, cscore_queue, logger,
-                       args.gae_lam, args.c_gae_lam, args.kl_coef)
+                    pi_optimizer, vf_optimizer, cvf_optimizer,
+                    args.num_epochs, args.mb_size,
+                    args.c_gamma, args.lam, args.delta, args.eta,
+                    args.nu, args.nu_lr, args.nu_max, cost_lim,
+                    args.l2_reg, score_queue, cscore_queue, logger,
+                    args.gae_lam, args.c_gae_lam, args.kl_coef)
     elif args.algo == "CUP_clip":
         agent = CUP_clip(env, policy, value_net, cvalue_net,
-                       pi_optimizer, vf_optimizer, cvf_optimizer,
-                       args.num_epochs, args.mb_size,
-                       args.c_gamma, args.lam, args.delta, args.eta,
-                       args.nu, args.nu_lr, args.nu_max, cost_lim,
-                       args.l2_reg, score_queue, cscore_queue, logger,
-                       args.gae_lam, args.c_gae_lam, args.kl_coef,args.clip)
+                         pi_optimizer, vf_optimizer, cvf_optimizer,
+                         args.num_epochs, args.mb_size,
+                         args.c_gamma, args.lam, args.delta, args.eta,
+                         args.nu, args.nu_lr, args.nu_max, cost_lim,
+                         args.l2_reg, score_queue, cscore_queue, logger,
+                         args.gae_lam, args.c_gae_lam, args.kl_coef, args.clip)
+    elif args.algo == "CUP_normalized_clip":
+        agent = CUP_normalized_clip(env, policy, value_net, cvalue_net,
+                                    pi_optimizer, vf_optimizer, cvf_optimizer,
+                                    args.num_epochs, args.mb_size,
+                                    args.c_gamma, args.lam, args.delta, args.eta,
+                                    args.nu, args.nu_lr, args.nu_max, cost_lim,
+                                    args.l2_reg, score_queue, cscore_queue, logger,
+                                    args.gae_lam, args.c_gae_lam, args.kl_coef, args.clip)
     start_time = time.time()
 
     for iter in range(args.max_iter_num):
@@ -95,9 +105,9 @@ def train(args):
         # Update Agent parameters
         agent.update_params(rollout, dtype, device)
         # Update learning rates
-        pi_scheduler.step()
-        vf_scheduler.step()
-        cvf_scheduler.step()
+        # pi_scheduler.step()
+        # vf_scheduler.step()
+        # cvf_scheduler.step()
 
         # Update time and running stat
         agent.logger.update('time', time.time() - start_time)
@@ -106,23 +116,22 @@ def train(args):
         # Save and print values
         agent.logger.dump(iter)
 
-    agent.logger.save_data(file_Path = "./Data")
+    agent.logger.save_data(file_Path="./Data")
+
 
 if __name__ == '__main__':
-
-
     parser = argparse.ArgumentParser(description='PyTorch CUP Implementation')
-    parser.add_argument('--cost-lim',type=float, default=20.0,
+    parser.add_argument('--cost-lim', type=float, default=25.0,
                         help='Data File Prefix')
     parser.add_argument('--file-prefix', default='None',
                         help='Data File Prefix')
     parser.add_argument('--env-id', default='Swimmer-v3',
                         help='Name of Environment (default: Swimmer-v3)')
-    parser.add_argument('--constraint', default='velocity',
+    parser.add_argument('--constraint', default='other',
                         help='Constraint setting (default: velocity')
     parser.add_argument('--activation', default="tanh",
                         help='Activation function for policy/critic network (Default: tanh)')
-    parser.add_argument('--hidden-size', type=int, default=64,
+    parser.add_argument('--hidden-size', type=int, default=256,
                         help='Tuple of size of hidden layers for policy/critic network (Default: (64, 64))')
     parser.add_argument('--logstd', type=float, default=-0.5,
                         help='Log std of Policy (Default: -0.5)')
@@ -130,17 +139,17 @@ if __name__ == '__main__':
                         help='Discount factor for reward (Default: 0.99)')
     parser.add_argument('--c-gamma', type=float, default=0.99,
                         help='Discount factor for cost (Default: 0.99)')
-    parser.add_argument('--gae-lam', type=float, default=0.95,
+    parser.add_argument('--gae-lam', type=float, default=0.97,
                         help='Lambda value for GAE for reward (Default: 0.95)')
-    parser.add_argument('--c-gae-lam', type=float, default=0.95,
+    parser.add_argument('--c-gae-lam', type=float, default=0.97,
                         help='Lambda value for GAE for cost (Default: 0.95)')
-    parser.add_argument('--l2-reg', type=float, default=1e-3,
+    parser.add_argument('--l2-reg', type=float, default=0.,
                         help='L2 Regularization Rate (default: 1e-3)')
     parser.add_argument('--pi-lr', type=float, default=3e-4,
                         help='Learning Rate for policy (default: 3e-4)')
-    parser.add_argument('--vf-lr', type=float, default=3e-4,
+    parser.add_argument('--vf-lr', type=float, default=1e-3,
                         help='Learning Rate for value function (default: 3e-4)')
-    parser.add_argument('--cvf-lr', type=float, default=3e-4,
+    parser.add_argument('--cvf-lr', type=float, default=1e-3,
                         help='Learning Rate for c-value function (default: 3e-4)')
     parser.add_argument('--lam', type=float, default=1.5,
                         help='Inverse temperature lambda (default: 1.5)')
@@ -150,15 +159,15 @@ if __name__ == '__main__':
                         help='KL bound for indicator function (default: 0.02)')
     parser.add_argument('--nu', type=float, default=0,
                         help='Cost coefficient (default: 0)')
-    parser.add_argument('--nu_lr', type=float, default=0.01,
+    parser.add_argument('--nu_lr', type=float, default=5e-2,
                         help='Cost coefficient learning rate (default: 0.01)')
     parser.add_argument('--nu_max', type=float, default=2.0,
                         help='Maximum cost coefficient (default: 2.0)')
-    parser.add_argument('--seed', type=int, default=1,
+    parser.add_argument('--seed', type=int, default=0,
                         help='Random Seed (default: 0)')
     parser.add_argument('--max-eps-len', type=int, default=1000,
                         help='Maximum length of episode (default: 1000)')
-    parser.add_argument('--mb-size', type=int, default=64,
+    parser.add_argument('--mb-size', type=int, default=32,
                         help='Minibatch size per update (default: 64)')
     parser.add_argument('--cuda', type=int, default=0,
                         help='cuda')
@@ -168,9 +177,9 @@ if __name__ == '__main__':
                         help='Number of passes through each minibatch per update (default: 10)')
     parser.add_argument('--max-iter-num', type=int, default=500,
                         help='Number of Main Iterations (default: 500)')
-    parser.add_argument('--algo', type=str,default="CUP_clip",
+    parser.add_argument('--algo', type=str, default="CUP_clip",
                         help='algo')
-    parser.add_argument('--kl-coef', type=float, default=0.3, 
+    parser.add_argument('--kl-coef', type=float, default=0.03,
                         help='kl_coef')
     parser.add_argument('--clip', type=float, default=0.2, help='clip')
     args = parser.parse_args()
