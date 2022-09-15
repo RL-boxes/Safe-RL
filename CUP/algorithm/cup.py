@@ -38,7 +38,8 @@ class CUP:
                  logger,
                  gae_lam,
                  c_gae_lam,
-                 kl_coef):
+                 kl_coef,
+                 clip):
 
         self.env = env
 
@@ -79,6 +80,7 @@ class CUP:
         self.gae_lam = gae_lam
         self.c_gae_lam = c_gae_lam
         self.kl_coef = kl_coef
+        self.clip = clip
 
     def update_params(self, rollout, dtype, device):
 
@@ -131,14 +133,9 @@ class CUP:
                 logprob, mean, std = self.policy.logprob(obs_b, act_b)
                 kl_new_old = gaussian_kl(mean, std, old_mean_b, old_std_b)
                 ratio = torch.exp(logprob - old_logprob_b)
-                temp_max = torch.max(ratio).detach().cpu().numpy()
-                temp_min = torch.min(ratio).detach().cpu().numpy()
-                if temp_max > self.max_ratio:
-                    self.max_ratio = temp_max
-                if temp_min < self.min_ratio:
-                    self.min_ratio = temp_min
                 pi_loss = ratio * adv_b
-                self.pi_loss = - (pi_loss.mean() - self.kl_coef * torch.sqrt(kl_new_old.mean() + 1e-10))
+                pi_loss_clip = torch.clamp(ratio, 1-self.clip, 1+self.clip)*adv_b
+                self.pi_loss = -torch.min(pi_loss, pi_loss_clip).mean()
                 self.pi_optimizer.zero_grad()
                 self.pi_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 40)
@@ -216,4 +213,3 @@ class CUP:
         self.logger.save_model('pi_loss', self.pi_loss)
         self.logger.save_model('vf_loss', self.vf_loss)
         self.logger.save_model('cvf_loss', self.cvf_loss)
-
