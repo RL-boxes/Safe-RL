@@ -12,7 +12,6 @@ from utils.logger import Logger
 from utils.running_stats import RunningStats
 from collections import deque
 from algorithm.cup import CUP
-from algorithm.cup_clip import CUP_clip
 
 def train(args):
     # Initialize data type
@@ -64,16 +63,7 @@ def train(args):
     #cost_lim = get_threshold(envname, constraint=args.constraint)
     cost_lim = logger.hyperparams["cost_lim"]
     # Initialize and train CUP agent
-    if args.algo == "CUP":
-        agent = CUP(env, policy, value_net, cvalue_net,
-                       pi_optimizer, vf_optimizer, cvf_optimizer,
-                       args.num_epochs, args.mb_size,
-                       args.c_gamma, args.lam, args.delta, args.eta,
-                       args.nu, args.nu_lr, args.nu_max, cost_lim,
-                       args.l2_reg, score_queue, cscore_queue, logger,
-                       args.gae_lam, args.c_gae_lam, args.kl_coef)
-    elif args.algo == "CUP_clip":
-        agent = CUP_clip(env, policy, value_net, cvalue_net,
+    agent = CUP(env, policy, value_net, cvalue_net,
                        pi_optimizer, vf_optimizer, cvf_optimizer,
                        args.num_epochs, args.mb_size,
                        args.c_gamma, args.lam, args.delta, args.eta,
@@ -168,7 +158,7 @@ if __name__ == '__main__':
                         help='Number of passes through each minibatch per update (default: 10)')
     parser.add_argument('--max-iter-num', type=int, default=500,
                         help='Number of Main Iterations (default: 500)')
-    parser.add_argument('--algo', type=str,default="CUP_clip",
+    parser.add_argument('--algo', type=str,default="CUP",
                         help='algo')
     parser.add_argument('--kl-coef', type=float, default=0.3, 
                         help='kl_coef')
